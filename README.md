@@ -13,14 +13,20 @@
 - Implemented as Express middleware so **every** HTTP request is checked before routes run.
 
 **Quick start**
-1. Install dependencies: `npm install express`
-2. Run the demo server: `node firewallSimulator.js`
-3. Try these in browser or Postman:
+1. Install dependencies: `npm install express dotenv morgan express-rate-limit`
+2. Create a `.env` file (example provided) or use defaults. Values available: `PORT`, `RATE_LIMIT_WINDOW` (minutes), `RATE_LIMIT_MAX_REQUESTS`.
+3. Run the demo server: `node server.js`
+4. Try these in browser or Postman:
    - `GET http://localhost:3000/public`  — should be allowed
    - `GET http://localhost:3000/admin`   — should be blocked (example)
    - `POST http://localhost:3000/data`   — allowed only from localhost (demo rule)
    - `GET http://localhost:3000/check-traffic?ip=127.0.0.1&port=80&protocol=TCP` — simulate
    - `GET http://localhost:3000/firewall-log` — view recent decisions
+
+**Notes about env and security**
+- `dotenv` allows using environment variables for configuration (safer than hardcoding). Keep secrets out of source control.
+- `morgan` logs requests to help with auditing; `express-rate-limit` provides basic DoS protection by limiting requests.
+
 
 **Core concepts to mention (interview-ready)**
 - Rule priority and first-match vs highest-priority semantics

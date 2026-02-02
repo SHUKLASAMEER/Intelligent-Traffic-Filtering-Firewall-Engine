@@ -145,108 +145,36 @@ function simulateFirewall(ip, port, protocol, direction = 'INBOUND') {
 }
 
 // --- Test simulation cases (simple) ---
-console.log('\nSimulation Test 1: Allowed HTTP (local)');
-let s1 = simulateFirewall('127.0.0.1', 80, 'TCP', 'INBOUND');
-console.log('Result:', s1.decision, '-', s1.reason);
+// Only run simulation tests when this file is executed directly (not when required as a module)
+if (require.main === module) {
+  console.log('\nSimulation Test 1: Allowed HTTP (local)');
+  let s1 = simulateFirewall('127.0.0.1', 80, 'TCP', 'INBOUND');
+  console.log('Result:', s1.decision, '-', s1.reason);
 
-console.log('\nSimulation Test 2: Blocked by blocked IP');
-let s2 = simulateFirewall('192.168.1.200', 22, 'TCP', 'INBOUND');
-console.log('Result:', s2.decision, '-', s2.reason);
+  console.log('\nSimulation Test 2: Blocked by blocked IP');
+  let s2 = simulateFirewall('192.168.1.200', 22, 'TCP', 'INBOUND');
+  console.log('Result:', s2.decision, '-', s2.reason);
 
-console.log('\nSimulation Test 3: Blocked path');
-let s3 = (() => {
-  const req = { ip: '127.0.0.1', method: 'GET', path: '/admin', protocol: 'HTTP', direction: 'INBOUND' };
-  return evaluateFirewallRequest(req);
-})();
-console.log('Result:', s3.decision, '-', s3.reason);
+  console.log('\nSimulation Test 3: Blocked path');
+  let s3 = (() => {
+    const req = { ip: '127.0.0.1', method: 'GET', path: '/admin', protocol: 'HTTP', direction: 'INBOUND' };
+    return evaluateFirewallRequest(req);
+  })();
+  console.log('Result:', s3.decision, '-', s3.reason);
 
-// --- Application-level firewall middleware & server routes ---
-/*
-Middleware-based application firewall (Layer 7 demo)
-- Runs for every incoming request before route handlers
-- Examines IP, method, path and protocol
-- Simple, readable: suitable for interviews and demos
-*/
-
-// Minimal Express server to demo the middleware-based firewall
-const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Helper: normalize client IP (handle ::ffff:127.0.0.1)
-function normalizeIp(raw) {
-  if (!raw) return '';
-  const first = String(raw).split(',')[0].trim();
-  if (first.indexOf('::ffff:') !== -1) return first.split('::ffff:').pop();
-  return first;
+  console.log('\nNote: To run the full demo server, use `node server.js` (server separates concerns and uses env config).');
 }
 
-// Firewall middleware: inspects real incoming HTTP requests
-function firewallMiddleware(req, res, next) {
-  const clientIp = normalizeIp(req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.socket.remoteAddress || req.ip);
-  const method = req.method;
-  const path = req.path;
-  const protocol = (req.protocol || 'http').toUpperCase();
-  const direction = 'INBOUND'; // application-level requests are inbound
-
-  const result = evaluateFirewallRequest({ ip: clientIp, method: method, path: path, protocol: protocol, direction: direction });
-
-  if (result.decision === 'ALLOWED') {
-    // request proceeds to the route handler
-    return next();
-  } else {
-    // request blocked at application layer
-    return res.status(403).json({ status: 'BLOCKED', reason: result.reason });
-  }
-}
-
-// Apply middleware globally so all routes are protected
-app.use(firewallMiddleware);
-
-// Protected routes
-app.get('/public', (req, res) => {
-  res.json({ status: 'ALLOWED', message: 'Public resource reached' });
-});
-
-app.get('/admin', (req, res) => {
-  res.json({ status: 'ALLOWED', message: 'Admin area (should be blocked by firewall)' });
-});
-
-// POST /data: allow only from certain IPs (add a specific rule here for demo)
-// Adding an explicit rule: allow POST /data from localhost with medium priority
-firewallConfig.rules.push({ priority: 20, action: 'ALLOW', method: 'POST', path: '/data', ip: '127.0.0.1', reason: 'Allow local POST /data' });
-
-app.post('/data', express.json(), (req, res) => {
-  res.json({ status: 'ALLOWED', message: 'Data accepted' });
-});
-
-// Route to view recent firewall decisions (for demo/audit)
-app.get('/firewall-log', (req, res) => {
-  res.json({ entries: decisionLog });
-});
-
-// Example simulation endpoint (keeps previous behavior; still passes middleware)
-app.get('/check-traffic', (req, res) => {
-  const { ip, port, protocol, direction } = req.query;
-  if (!ip || !port || !protocol) {
-    return res.status(400).json({ status: 'ERROR', reason: 'Missing ip, port, or protocol query parameter' });
-  }
-  const portNum = Number(port);
-  if (Number.isNaN(portNum)) {
-    return res.status(400).json({ status: 'ERROR', reason: 'Port must be a number' });
-  }
-  const result = simulateFirewall(ip, portNum, protocol, direction || 'INBOUND');
-  return res.json({ status: result.decision, reason: result.reason });
-});
-
-app.listen(PORT, () => {
-  console.log(`\nApplication-level firewall server running: http://localhost:${PORT}`);
-  console.log('Try: http://localhost:' + PORT + '/public  (should be allowed)');
-  console.log('Try: http://localhost:' + PORT + '/admin   (should be blocked)');
-  console.log('POST: curl -X POST http://localhost:' + PORT + '/data  (allowed only from localhost)');
-});
+// Export middleware and helpers so other files (server.js) can use them
+module.exports = {
+  firewallMiddleware,
+  evaluateFirewallRequest,
+  simulateFirewall,
+  decisionLog
+};
 
 // Notes:
-// - Middleware is used so every request is checked before reaching routes.
+// - Middleware is used so every request can be centrally checked before reaching routes.
 // - This is an application-layer demo (Layer 7). It does not inspect raw packets.
-// - Limitations: in-memory logs, simple exact/prefix matches, no rate-limiting.
+// - Limitations: in-memory logs, simple exact/prefix matches, no persistent storage.
+
